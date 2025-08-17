@@ -1,4 +1,4 @@
-"""Database model for burn-up chart system."""
+"""Enhanced database model with date filtering support for queries."""
 
 from datetime import date, datetime
 from typing import List, Optional, Tuple
@@ -8,7 +8,7 @@ import sqlite3
 
 
 class DatabaseModel:
-    """Handle all database operations for the burn-up system."""
+    """Handle all database operations for the burn-up system with date filtering support."""
 
     def __init__(self, db_path: str = "burnup_history.db") -> None:
         """Initialize database model.
@@ -158,29 +158,64 @@ class DatabaseModel:
         return result[0] if result else None
 
     def get_historical_actual_data(
-        self, project_name: str
+        self,
+        project_name: str,
+        target_year: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
     ) -> Tuple[List[date], List[float]]:
-        """Get historical actual progress data for a project.
+        """Get historical actual progress data for a project with optional date filtering.
 
         Args:
             project_name: Name of the project
+            target_year: Optional year to filter tasks
+            start_date: Optional start date filter
+            end_date: Optional end date filter
 
         Returns:
             Tuple of (dates, progress_values)
         """
         conn = sqlite3.connect(self.db_path)
 
-        query = """
+        # Build the WHERE clause based on filters
+        where_conditions = ["project_name = ?"]
+        params = [project_name]
+
+        # Add date filtering conditions for tasks
+        if target_year:
+            year_start = date(target_year, 1, 1).isoformat()
+            year_end = date(target_year, 12, 31).isoformat()
+            where_conditions.append(
+                """
+                (start_date >= ? OR end_date >= ?) AND
+                (start_date <= ? OR end_date <= ?)
+            """
+            )
+            params.extend([year_start, year_start, year_end, year_end])
+        elif start_date or end_date:
+            if start_date:
+                where_conditions.append("(start_date >= ? OR end_date >= ?)")
+                params.extend([start_date.isoformat(), start_date.isoformat()])
+            if end_date:
+                where_conditions.append("(start_date <= ? OR end_date <= ?)")
+                params.extend([end_date.isoformat(), end_date.isoformat()])
+
+        # Add record date filter (always include)
+        today = datetime.now().date()
+        where_conditions.append("record_date <= ?")
+        params.append(today.isoformat())
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
             SELECT record_date, AVG(actual_progress) as avg_progress
             FROM daily_progress
-            WHERE project_name = ? AND record_date <= ?
+            WHERE {where_clause}
             GROUP BY record_date
             ORDER BY record_date
         """
 
-        today = datetime.now().date()
-        df = pd.read_sql_query(query, conn, params=[project_name, today.isoformat()])
-
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
         if df.empty:
@@ -194,25 +229,59 @@ class DatabaseModel:
 
         return dates, progress_values
 
-    def get_task_annotations(self, project_name: str) -> List[dict]:
-        """Get task annotations for due dates.
+    def get_task_annotations(
+        self,
+        project_name: str,
+        target_year: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[dict]:
+        """Get task annotations for due dates with optional date filtering.
 
         Args:
             project_name: Name of the project
+            target_year: Optional year to filter tasks
+            start_date: Optional start date filter
+            end_date: Optional end date filter
 
         Returns:
             List of task annotation dictionaries
         """
         conn = sqlite3.connect(self.db_path)
 
-        query = """
+        # Build the WHERE clause based on filters
+        where_conditions = ["project_name = ?", "show_label = 'v'"]
+        params = [project_name]
+
+        # Add date filtering conditions
+        if target_year:
+            year_start = date(target_year, 1, 1).isoformat()
+            year_end = date(target_year, 12, 31).isoformat()
+            where_conditions.append(
+                """
+                (start_date >= ? OR end_date >= ?) AND
+                (start_date <= ? OR end_date <= ?)
+            """
+            )
+            params.extend([year_start, year_start, year_end, year_end])
+        elif start_date or end_date:
+            if start_date:
+                where_conditions.append("start_date >= ?")
+                params.extend([start_date.isoformat()])
+            if end_date:
+                where_conditions.append("end_date <= ?")
+                params.extend([end_date.isoformat()])
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
             SELECT DISTINCT project_name, task_name, end_date, show_label
             FROM daily_progress
-            WHERE project_name = ? AND show_label = 'v'
+            WHERE {where_clause}
             ORDER BY end_date
         """
 
-        df = pd.read_sql_query(query, conn, params=[project_name])
+        df = pd.read_sql_query(query, conn, params=params)
         conn.close()
 
         if df.empty:
@@ -220,17 +289,76 @@ class DatabaseModel:
 
         annotations = []
         for _, row in df.iterrows():
-            end_date = datetime.strptime(row["end_date"], "%Y-%m-%d").date()
+            end_date_obj = datetime.strptime(row["end_date"], "%Y-%m-%d").date()
             annotations.append(
                 {
                     "project_name": row["project_name"],
                     "task_name": row["task_name"],
-                    "end_date": end_date,
+                    "end_date": end_date_obj,
                     "label": f"{row['project_name']} - {row['task_name']}",
                 }
             )
 
         return annotations
+
+    def get_filtered_tasks_from_db(
+        self,
+        project_name: str,
+        target_year: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[str]:
+        """Get list of task names that match the filtering criteria.
+
+        This is useful for ensuring consistency between Excel filtering and DB filtering.
+
+        Args:
+            project_name: Name of the project
+            target_year: Optional year to filter tasks
+            start_date: Optional start date filter
+            end_date: Optional end date filter
+
+        Returns:
+            List of task names that match the criteria
+        """
+        conn = sqlite3.connect(self.db_path)
+
+        # Build the WHERE clause based on filters
+        where_conditions = ["project_name = ?"]
+        params = [project_name]
+
+        # Add date filtering conditions
+        if target_year:
+            year_start = date(target_year, 1, 1).isoformat()
+            year_end = date(target_year, 12, 31).isoformat()
+            where_conditions.append(
+                """
+                (start_date >= ? OR end_date >= ?) AND
+                (start_date <= ? OR end_date <= ?)
+            """
+            )
+            params.extend([year_start, year_start, year_end, year_end])
+        elif start_date or end_date:
+            if start_date:
+                where_conditions.append("(start_date >= ? OR end_date >= ?)")
+                params.extend([start_date.isoformat(), start_date.isoformat()])
+            if end_date:
+                where_conditions.append("(start_date <= ? OR end_date <= ?)")
+                params.extend([end_date.isoformat(), end_date.isoformat()])
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+            SELECT DISTINCT task_name
+            FROM daily_progress
+            WHERE {where_clause}
+            ORDER BY task_name
+        """
+
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+
+        return df["task_name"].astype(str).tolist() if not df.empty else []
 
     def get_protection_status(self, project_name: str) -> pd.DataFrame:
         """Get historical protection status for a project.

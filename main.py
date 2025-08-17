@@ -1,6 +1,7 @@
 """Main entry point for the burn-up chart system."""
 
 import traceback
+from datetime import date
 
 from src.burnup_manager import BurnUpManager
 
@@ -40,7 +41,13 @@ def main() -> None:
 
         # Step 4: Show improved chart
         print("Step 4: Show improved chart")
-        chart = manager.show_improved_chart("YFB", "plan.xlsx")
+        # chart = manager.show_improved_chart("YFB", "plan.xlsx")
+        start_date = date(2025, 7, 1)
+        end_date = date(2025, 12, 31)
+        chart = manager.show_improved_chart(
+            "YFB", "plan.xlsx", start_date=start_date, end_date=end_date
+        )
+        # chart = manager.show_improved_chart("YFB", "plan.xlsx", target_year=2025)
         if chart:
             print("✅ Improved chart displayed successfully!")
             print("  ✓ Standard date display (no week numbers)")

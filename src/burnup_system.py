@@ -1,20 +1,19 @@
-"""Main burn-up system implementation."""
+"""Final fixed burn-up system with proper plan progress filtering."""
 
-import datetime as dt
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Optional
 
-import pandas as pd
 import plotly.graph_objects as go
 
 from src.chart_generator import ChartGenerator
+from src.data_filter import DataFilter
 from src.data_loader import DataLoader
 from src.database_model import DatabaseModel
 from src.progress_calculator import ProgressCalculator
 
 
 class BurnUpSystem:
-    """Main burn-up chart system with history protection."""
+    """Main burn-up chart system with complete date filtering including plan progress."""
 
     def __init__(self, db_path: str = "burnup_history.db") -> None:
         """Initialize burn-up system.
@@ -27,25 +26,67 @@ class BurnUpSystem:
         self.data_loader = DataLoader()
         self.progress_calc = ProgressCalculator()
         self.chart_gen = ChartGenerator()
+        self.data_filter = DataFilter()
 
-    def initialize_project(self, file_path: str) -> bool:
-        """Initialize project with historical data generation.
+    def initialize_project(
+        self,
+        file_path: str,
+        target_year: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> bool:
+        """Initialize project with historical data generation and optional date filtering.
 
         This method should only be called once per project to generate
         smooth historical progress data.
 
         Args:
             file_path: Path to project data file
+            target_year: Optional year to filter tasks (e.g., 2025)
+            start_date: Optional start date filter
+            end_date: Optional end date filter
 
         Returns:
             True if initialization successful, False otherwise
         """
         print("🚀 Project initialization...")
 
+        if target_year:
+            print(f"📅 Filtering tasks for year: {target_year}")
+        elif start_date or end_date:
+            print(f"📅 Filtering tasks for date range: {start_date} to {end_date}")
+
         try:
             # Load and validate data
             df = self.data_loader.load_project_data(file_path)
             if not self.data_loader.validate_project_data(df):
+                return False
+
+            # Apply date filtering if specified
+            original_count = len(df)
+            if target_year:
+                # Validate year filter first
+                is_valid, message = self.data_filter.validate_year_filter(
+                    target_year, df
+                )
+                if not is_valid:
+                    print(f"❌ Year filter validation failed: {message}")
+                    return False
+                print(f"✅ Year filter validation: {message}")
+
+                # Apply year filter
+                df = self.data_filter.filter_tasks_within_year(df, target_year)
+            elif start_date or end_date:
+                df = self.data_filter.filter_by_date_range(
+                    df, start_date=start_date, end_date=end_date
+                )
+
+            filtered_count = len(df)
+            if filtered_count < original_count:
+                print(f"📊 Filtered from {original_count} to {filtered_count} tasks")
+
+            if filtered_count == 0:
+                print("❌ No tasks remaining after filtering")
                 return False
 
             # Process each project
@@ -62,7 +103,7 @@ class BurnUpSystem:
 
                 print(f"🔄 Initializing project: {project_name}")
 
-                # Generate smooth progress sequence for this project
+                # Generate smooth progress sequence for this project (using filtered data)
                 progress_sequence = self.progress_calc.generate_smooth_actual_progress(
                     project_data, self.today
                 )
@@ -105,24 +146,61 @@ class BurnUpSystem:
             print(f"❌ Initialization failed: {e}")
             return False
 
-    def daily_update_safe(self, file_path: str) -> bool:
-        """Perform safe daily update.
+    def daily_update_safe(
+        self,
+        file_path: str,
+        target_year: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> bool:
+        """Perform safe daily update with optional date filtering.
 
         Only updates today's records without modifying historical data.
 
         Args:
             file_path: Path to project data file
+            target_year: Optional year to filter tasks
+            start_date: Optional start date filter
+            end_date: Optional end date filter
 
         Returns:
             True if update successful, False otherwise
         """
         print(f"📅 Safe daily update - {self.today}")
 
+        if target_year:
+            print(f"📅 Filtering tasks for year: {target_year}")
+        elif start_date or end_date:
+            print(f"📅 Filtering tasks for date range: {start_date} to {end_date}")
+
         try:
             # Load and validate data
             df = self.data_loader.load_project_data(file_path)
             if not self.data_loader.validate_project_data(df):
                 return False
+
+            # Apply date filtering if specified
+            original_count = len(df)
+            if target_year:
+                # Validate year filter first
+                is_valid, message = self.data_filter.validate_year_filter(
+                    target_year, df
+                )
+                if not is_valid:
+                    print(f"❌ Year filter validation failed: {message}")
+                    return False
+                print(f"✅ Year filter validation: {message}")
+
+                # Apply year filter
+                df = self.data_filter.filter_tasks_within_year(df, target_year)
+            elif start_date or end_date:
+                df = self.data_filter.filter_by_date_range(
+                    df, start_date=start_date, end_date=end_date
+                )
+
+            filtered_count = len(df)
+            if filtered_count < original_count:
+                print(f"📊 Filtered from {original_count} to {filtered_count} tasks")
 
             # Check if initialization is needed first
             if not self.db_model.has_historical_data():
@@ -186,58 +264,120 @@ class BurnUpSystem:
             return False
 
     def create_burnup_chart(
-        self, project_name: str, file_path: str = "plan.xlsx"
+        self,
+        project_name: str,
+        file_path: str = "plan.xlsx",
+        target_year: Optional[int] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
     ) -> Optional[go.Figure]:
-        """Create improved burn-up chart with smart annotation positioning.
+        """Create improved burn-up chart with complete date filtering including plan progress.
 
         Args:
             project_name: Name of the project to chart
             file_path: Path to current project data file
+            target_year: Optional year to filter tasks
+            start_date: Optional start date filter
+            end_date: Optional end date filter
 
         Returns:
             Plotly Figure object or None if failed
         """
         print(f"📊 Generating improved burn-up chart: {project_name}")
 
+        if target_year:
+            print(
+                f"📅 Filtering ALL data (Excel + Database + Plan) for year: {target_year}"
+            )
+        elif start_date or end_date:
+            print(
+                f"📅 Filtering ALL data (Excel + Database + Plan) for date range: {start_date} to {end_date}"
+            )
+
         try:
             # Load current data
             df = self.data_loader.load_project_data(file_path)
+
+            # Apply date filtering if specified
+            original_count = len(df)
+            if target_year:
+                # Validate year filter first
+                is_valid, message = self.data_filter.validate_year_filter(
+                    target_year, df
+                )
+                if not is_valid:
+                    print(f"❌ Year filter validation failed: {message}")
+                    return None
+                print(f"✅ Year filter validation: {message}")
+
+                # Apply year filter
+                df = self.data_filter.filter_tasks_within_year(df, target_year)
+            elif start_date or end_date:
+                df = self.data_filter.filter_by_date_range(
+                    df, start_date=start_date, end_date=end_date
+                )
+
+            filtered_count = len(df)
+            if filtered_count < original_count:
+                print(
+                    f"📊 Filtered Excel data from {original_count} to {filtered_count} tasks"
+                )
+
             project_data = df[df["Project Name"] == project_name]
 
             if project_data.empty:
-                print("❌ No data found for the specified project")
+                print("❌ No data found for the specified project after filtering")
                 return None
 
-            # Get date range
-            project_start = project_data["Start Date"].min()
-            project_end = project_data["End Date"].max()
-
-            # Create date range with buffer
-            dates = []
-            current_date = project_start - dt.timedelta(days=5)
-            while current_date <= project_end + dt.timedelta(days=5):
-                dates.append(current_date)
-                current_date += dt.timedelta(days=1)
-
-            # Calculate plan progress
-            plan_progress = [
-                self.progress_calc.calculate_plan_progress_original(
-                    project_data, date_val
+            # FIXED: Calculate optimal chart date range based on FILTERED tasks
+            print("📊 Calculating optimal chart date range for filtered tasks...")
+            chart_start, chart_end = (
+                self.progress_calc.calculate_optimal_chart_date_range(
+                    project_data, buffer_days=5, min_range_days=30
                 )
-                for date_val in dates
-            ]
+            )
+            print(f"📊 Chart date range: {chart_start} to {chart_end}")
 
-            # Get historical actual data
+            # FIXED: Generate plan progress sequence for the filtered date range
+            print("📊 Generating plan progress for filtered date range...")
+            dates, plan_progress = self.progress_calc.generate_plan_progress_sequence(
+                project_data, chart_start, chart_end
+            )
+            print(f"📊 Generated plan progress: {len(dates)} data points")
+
+            # Get filtered historical actual data from database
+            print("📊 Getting filtered historical data from database...")
             actual_dates, actual_progress = self.db_model.get_historical_actual_data(
-                project_name
+                project_name,
+                target_year=target_year,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            print(f"📊 Retrieved {len(actual_dates)} filtered historical data points")
+
+            # Get filtered task annotations from database
+            print("📊 Getting filtered annotations from database...")
+            task_annotations = self.db_model.get_task_annotations(
+                project_name,
+                target_year=target_year,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            print(f"📊 Retrieved {len(task_annotations)} filtered annotations")
+
+            # Get filter context for chart title
+            filter_context = self.progress_calc.get_filtered_date_context(
+                project_data, target_year, start_date, end_date
             )
 
-            # Get task annotations
-            task_annotations = self.db_model.get_task_annotations(project_name)
+            # Create chart title with filter info
+            title_suffix = ""
+            if filter_context["filter_type"] != "none":
+                title_suffix = f" ({filter_context['filter_description']})"
 
             # Create chart
             chart = self.chart_gen.create_burnup_chart(
-                project_name=project_name,
+                project_name=f"{project_name}{title_suffix}",
                 dates=dates,
                 plan_progress=plan_progress,
                 actual_dates=actual_dates,
@@ -246,11 +386,57 @@ class BurnUpSystem:
                 today=datetime.now(),
             )
 
+            print("✅ Chart generated with COMPLETELY filtered data:")
+            print(f"  - Plan date range: {chart_start} to {chart_end}")
+            print(f"  - Plan data points: {len(dates)} (filtered)")
+            print(f"  - Actual data points: {len(actual_dates)} (filtered)")
+            print(f"  - Annotations: {len(task_annotations)} (filtered)")
+            print(f"  - Filter context: {filter_context['filter_description']}")
+
             return chart
 
         except Exception as e:
             print(f"❌ Chart generation failed: {e}")
             return None
+
+    def show_data_summary(self, file_path: str) -> None:
+        """Show summary of data including date ranges and years covered.
+
+        Args:
+            file_path: Path to project data file
+        """
+        try:
+            df = self.data_loader.load_project_data(file_path)
+
+            print("\n📊 Data Summary:")
+            print("=" * 50)
+
+            # Overall summary
+            overall_summary = self.data_filter.get_date_range_summary(df)
+            print(f"Total tasks: {overall_summary['total_tasks']}")
+            print(f"Date range: {overall_summary['date_range']}")
+            print(
+                f"Years covered: {', '.join(map(str, overall_summary['years_covered']))}"
+            )
+
+            # Project-wise summary
+            print("\n📋 Project Breakdown:")
+            for project_name in df["Project Name"].unique():
+                project_data = df[df["Project Name"] == project_name]
+                project_summary = self.data_filter.get_date_range_summary(project_data)
+                print(
+                    f"  {project_name}: {project_summary['total_tasks']} tasks, "
+                    f"{project_summary['date_range']}"
+                )
+
+            # Year-wise summary
+            print("\n📅 Year Breakdown:")
+            for year in overall_summary["years_covered"]:
+                year_data = self.data_filter.filter_tasks_within_year(df, year)
+                print(f"  {year}: {len(year_data)} tasks")
+
+        except Exception as e:
+            print(f"❌ Failed to show data summary: {e}")
 
     def show_protection_status(self, project_name: str) -> None:
         """Display historical protection status for a project.
@@ -264,7 +450,7 @@ class BurnUpSystem:
             print(f"❌ No data found for {project_name}")
             return
 
-        print(f"\\n🔒 {project_name} Historical Protection Status:")
+        print(f"\n🔒 {project_name} Historical Protection Status:")
         print(
             f"  Record date range: {df['record_date'].min()} ~ {df['record_date'].max()}"
         )
