@@ -1,0 +1,5 @@
+plan.xlsx
+*.xlsx
+__pycache__
+.coverage
+*.db
