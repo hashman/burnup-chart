@@ -1,15 +1,61 @@
 """Final fixed burn-up system with proper plan progress filtering."""
 
+from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 
 import plotly.graph_objects as go
 
 from src.chart_generator import ChartGenerator
 from src.data_filter import DataFilter
 from src.data_loader import DataLoader
-from src.database_model import DatabaseModel
+from src.database_model import DatabaseModel, ProgressRecord
 from src.progress_calculator import ProgressCalculator
+
+
+@dataclass(frozen=True)
+class DateFilterOptions:
+    """Represent optional filter parameters for chart operations."""
+
+    target_year: Optional[int] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+    def has_date_range(self) -> bool:
+        """Return True if any start or end date filters are set."""
+
+        return self.start_date is not None or self.end_date is not None
+
+
+@dataclass
+class ChartComponents:
+    """Bundle chart data preparation results."""
+
+    dates: List[date]
+    plan_progress: List[float]
+    actual_dates: List[date]
+    actual_progress: List[float]
+    task_annotations: List[dict]
+    chart_start: date
+    chart_end: date
+    filter_context: dict
+
+    def title_suffix(self) -> str:
+        """Return a suffix describing the applied filters."""
+
+        if self.filter_context.get("filter_type") != "none":
+            return f" ({self.filter_context['filter_description']})"
+        return ""
+
+    def log_statistics(self) -> None:
+        """Print a concise summary of the chart data."""
+
+        print("✅ Chart generated with COMPLETELY filtered data:")
+        print(f"  - Plan date range: {self.chart_start} to {self.chart_end}")
+        print(f"  - Plan data points: {len(self.dates)} (filtered)")
+        print(f"  - Actual data points: {len(self.actual_dates)} (filtered)")
+        print(f"  - Annotations: {len(self.task_annotations)} (filtered)")
+        print(f"  - Filter context: {self.filter_context['filter_description']}")
 
 
 class BurnUpSystem:
@@ -125,7 +171,7 @@ class BurnUpSystem:
                         )  # Don't exceed current actual progress
 
                         # Insert historical record
-                        self.db_model.insert_progress_record(
+                        record = ProgressRecord(
                             record_date=progress_data["date"],
                             project_name=project_name,
                             task_name=task["Task Name"],
@@ -137,6 +183,7 @@ class BurnUpSystem:
                             show_label=task.get("Show Label", "v"),
                             is_backfilled=progress_data["date"] < self.today,
                         )
+                        self.db_model.insert_progress_record(record)
 
                 print(f"✅ Project {project_name} initialization completed")
 
@@ -240,7 +287,7 @@ class BurnUpSystem:
                     print(f"  Adding {task_name}: {actual_progress:.1%}")
 
                 # Only update or insert today's record
-                self.db_model.insert_progress_record(
+                record = ProgressRecord(
                     record_date=self.today,
                     project_name=project_name,
                     task_name=task_name,
@@ -252,6 +299,7 @@ class BurnUpSystem:
                     show_label=show_label,
                     is_backfilled=False,
                 )
+                self.db_model.insert_progress_record(record)
 
                 updates += 1
 
@@ -301,140 +349,155 @@ class BurnUpSystem:
         )
         return True
 
+    def _log_chart_request(
+        self, project_name: str, filter_options: DateFilterOptions
+    ) -> None:
+        """Log the incoming chart request and selected filters."""
+
+        print(f"📊 Generating improved burn-up chart: {project_name}")
+        if filter_options.target_year is not None:
+            print(
+                "📅 Filtering ALL data (Excel + Database + Plan) for year: "
+                f"{filter_options.target_year}"
+            )
+        elif filter_options.has_date_range():
+            print(
+                "📅 Filtering ALL data (Excel + Database + Plan) for date range: "
+                f"{filter_options.start_date} to {filter_options.end_date}"
+            )
+
+    def _apply_chart_filters(self, df, filter_options: DateFilterOptions):
+        """Apply the requested filters and return the filtered DataFrame."""
+
+        original_count = len(df)
+        filtered_df = df
+
+        if filter_options.target_year is not None:
+            is_valid, message = self.data_filter.validate_year_filter(
+                filter_options.target_year, filtered_df
+            )
+            if not is_valid:
+                raise ValueError(f"Year filter validation failed: {message}")
+            print(f"✅ Year filter validation: {message}")
+            filtered_df = self.data_filter.filter_tasks_within_year(
+                filtered_df, filter_options.target_year
+            )
+        elif filter_options.has_date_range():
+            filtered_df = self.data_filter.filter_by_date_range(
+                filtered_df,
+                start_date=filter_options.start_date,
+                end_date=filter_options.end_date,
+            )
+
+        filtered_count = len(filtered_df)
+        if filtered_count < original_count:
+            print(
+                f"📊 Filtered Excel data from {original_count} to {filtered_count} tasks"
+            )
+
+        if filtered_count == 0:
+            raise ValueError("No tasks remaining after filtering")
+
+        return filtered_df
+
+    def _build_chart_components(
+        self,
+        project_data,
+        project_name: str,
+        filter_options: DateFilterOptions,
+    ) -> ChartComponents:
+        """Prepare data sequences and metadata required for charting."""
+
+        print("📊 Calculating optimal chart date range for filtered tasks...")
+        chart_start, chart_end = self.progress_calc.calculate_optimal_chart_date_range(
+            project_data, buffer_days=5, min_range_days=30
+        )
+        print(f"📊 Chart date range: {chart_start} to {chart_end}")
+
+        print("📊 Generating plan progress for filtered date range...")
+        dates, plan_progress = self.progress_calc.generate_plan_progress_sequence(
+            project_data, chart_start, chart_end
+        )
+        print(f"📊 Generated plan progress: {len(dates)} data points")
+
+        print("📊 Getting filtered historical data from database...")
+        actual_dates, actual_progress = self.db_model.get_historical_actual_data(
+            project_name,
+            target_year=filter_options.target_year,
+            start_date=filter_options.start_date,
+            end_date=filter_options.end_date,
+        )
+        print(f"📊 Retrieved {len(actual_dates)} filtered historical data points")
+
+        print("📊 Getting filtered annotations from database...")
+        task_annotations = self.db_model.get_task_annotations(
+            project_name,
+            target_year=filter_options.target_year,
+            start_date=filter_options.start_date,
+            end_date=filter_options.end_date,
+        )
+        print(f"📊 Retrieved {len(task_annotations)} filtered annotations")
+
+        filter_context = self.progress_calc.get_filtered_date_context(
+            project_data,
+            filter_options.target_year,
+            filter_options.start_date,
+            filter_options.end_date,
+        )
+
+        return ChartComponents(
+            dates=dates,
+            plan_progress=plan_progress,
+            actual_dates=actual_dates,
+            actual_progress=actual_progress,
+            task_annotations=task_annotations,
+            chart_start=chart_start,
+            chart_end=chart_end,
+            filter_context=filter_context,
+        )
+
     def create_burnup_chart(
         self,
         project_name: str,
         file_path: str = "plan.xlsx",
-        target_year: Optional[int] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        filter_options: Optional[DateFilterOptions] = None,
     ) -> Optional[go.Figure]:
-        """Create improved burn-up chart with complete date filtering including plan progress.
+        """Create improved burn-up chart with complete date filtering including plan progress."""
 
-        Args:
-            project_name: Name of the project to chart
-            file_path: Path to current project data file
-            target_year: Optional year to filter tasks
-            start_date: Optional start date filter
-            end_date: Optional end date filter
-
-        Returns:
-            Plotly Figure object or None if failed
-        """
-        print(f"📊 Generating improved burn-up chart: {project_name}")
-
-        if target_year:
-            print(
-                f"📅 Filtering ALL data (Excel + Database + Plan) for year: {target_year}"
-            )
-        elif start_date or end_date:
-            print(
-                f"📅 Filtering ALL data (Excel + Database + Plan) for date range: {start_date} to {end_date}"
-            )
+        active_filters = filter_options or DateFilterOptions()
+        self._log_chart_request(project_name, active_filters)
 
         try:
-            # Load current data
             df = self.data_loader.load_project_data(file_path)
-
-            # Apply date filtering if specified
-            original_count = len(df)
-            if target_year:
-                # Validate year filter first
-                is_valid, message = self.data_filter.validate_year_filter(
-                    target_year, df
-                )
-                if not is_valid:
-                    print(f"❌ Year filter validation failed: {message}")
-                    return None
-                print(f"✅ Year filter validation: {message}")
-
-                # Apply year filter
-                df = self.data_filter.filter_tasks_within_year(df, target_year)
-            elif start_date or end_date:
-                df = self.data_filter.filter_by_date_range(
-                    df, start_date=start_date, end_date=end_date
-                )
-
-            filtered_count = len(df)
-            if filtered_count < original_count:
-                print(
-                    f"📊 Filtered Excel data from {original_count} to {filtered_count} tasks"
-                )
-
-            project_data = df[df["Project Name"] == project_name]
+            filtered_df = self._apply_chart_filters(df, active_filters)
+            project_data = filtered_df[filtered_df["Project Name"] == project_name]
 
             if project_data.empty:
                 print("❌ No data found for the specified project after filtering")
                 return None
 
-            # FIXED: Calculate optimal chart date range based on FILTERED tasks
-            print("📊 Calculating optimal chart date range for filtered tasks...")
-            chart_start, chart_end = (
-                self.progress_calc.calculate_optimal_chart_date_range(
-                    project_data, buffer_days=5, min_range_days=30
-                )
-            )
-            print(f"📊 Chart date range: {chart_start} to {chart_end}")
-
-            # FIXED: Generate plan progress sequence for the filtered date range
-            print("📊 Generating plan progress for filtered date range...")
-            dates, plan_progress = self.progress_calc.generate_plan_progress_sequence(
-                project_data, chart_start, chart_end
-            )
-            print(f"📊 Generated plan progress: {len(dates)} data points")
-
-            # Get filtered historical actual data from database
-            print("📊 Getting filtered historical data from database...")
-            actual_dates, actual_progress = self.db_model.get_historical_actual_data(
-                project_name,
-                target_year=target_year,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            print(f"📊 Retrieved {len(actual_dates)} filtered historical data points")
-
-            # Get filtered task annotations from database
-            print("📊 Getting filtered annotations from database...")
-            task_annotations = self.db_model.get_task_annotations(
-                project_name,
-                target_year=target_year,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            print(f"📊 Retrieved {len(task_annotations)} filtered annotations")
-
-            # Get filter context for chart title
-            filter_context = self.progress_calc.get_filtered_date_context(
-                project_data, target_year, start_date, end_date
+            components = self._build_chart_components(
+                project_data, project_name, active_filters
             )
 
-            # Create chart title with filter info
-            title_suffix = ""
-            if filter_context["filter_type"] != "none":
-                title_suffix = f" ({filter_context['filter_description']})"
-
-            # Create chart
             chart = self.chart_gen.create_burnup_chart(
-                project_name=f"{project_name}{title_suffix}",
-                dates=dates,
-                plan_progress=plan_progress,
-                actual_dates=actual_dates,
-                actual_progress=actual_progress,
-                task_annotations=task_annotations,
+                project_name=f"{project_name}{components.title_suffix()}",
+                dates=components.dates,
+                plan_progress=components.plan_progress,
+                actual_dates=components.actual_dates,
+                actual_progress=components.actual_progress,
+                task_annotations=components.task_annotations,
                 today=datetime.now(),
             )
 
-            print("✅ Chart generated with COMPLETELY filtered data:")
-            print(f"  - Plan date range: {chart_start} to {chart_end}")
-            print(f"  - Plan data points: {len(dates)} (filtered)")
-            print(f"  - Actual data points: {len(actual_dates)} (filtered)")
-            print(f"  - Annotations: {len(task_annotations)} (filtered)")
-            print(f"  - Filter context: {filter_context['filter_description']}")
-
+            components.log_statistics()
             return chart
 
-        except Exception as e:
-            print(f"❌ Chart generation failed: {e}")
+        except ValueError as error:
+            print(f"❌ Chart generation failed: {error}")
+            return None
+        except Exception as error:
+            print(f"❌ Chart generation failed: {error}")
             return None
 
     def show_data_summary(self, file_path: str) -> None:

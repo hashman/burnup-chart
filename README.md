@@ -213,7 +213,7 @@ Core system implementation.
 
 - `initialize_project(file_path)`: Project initialization
 - `daily_update_safe(file_path)`: Safe daily updates
-- `create_burnup_chart(project_name, file_path)`: Chart generation
+- `create_burnup_chart(project_name, file_path, filter_options)`: Chart generation with `DateFilterOptions`
 - `show_protection_status(project_name)`: Status display
 
 ### DatabaseModel
@@ -222,7 +222,7 @@ Database operations and persistence.
 
 #### Methods
 
-- `insert_progress_record(...)`: Insert progress record
+- `insert_progress_record(progress_record)`: Insert progress record using `ProgressRecord`
 - `get_historical_actual_data(project_name)`: Get historical data
 - `get_task_annotations(project_name)`: Get task annotations
 - `has_historical_data(project_name)`: Check for existing data

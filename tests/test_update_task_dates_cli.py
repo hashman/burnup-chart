@@ -7,7 +7,7 @@ from datetime import date
 from unittest import TestCase
 
 from update_task_dates import main as cli_main
-from src.database_model import DatabaseModel
+from src.database_model import DatabaseModel, ProgressRecord
 
 
 class UpdateTaskDatesCLITest(TestCase):
@@ -20,16 +20,18 @@ class UpdateTaskDatesCLITest(TestCase):
 
         # Seed with a sample record to update during tests
         self.db_model.insert_progress_record(
-            record_date=date(2024, 1, 15),
-            project_name="Demo Project",
-            task_name="Implement Feature",
-            assignee="Alice",
-            start_date=date(2024, 1, 1),
-            end_date=date(2024, 1, 31),
-            actual_progress=0.5,
-            status="In Progress",
-            show_label="v",
-            is_backfilled=False,
+            ProgressRecord(
+                record_date=date(2024, 1, 15),
+                project_name="Demo Project",
+                task_name="Implement Feature",
+                assignee="Alice",
+                start_date=date(2024, 1, 1),
+                end_date=date(2024, 1, 31),
+                actual_progress=0.5,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            )
         )
 
     def tearDown(self) -> None:
@@ -55,14 +57,13 @@ class UpdateTaskDatesCLITest(TestCase):
 
         self.assertEqual(exit_code, 0)
 
-        conn = sqlite3.connect(self.temp_db.name)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT start_date, end_date FROM daily_progress WHERE task_name = ?",
-            ("Implement Feature",),
-        )
-        start_value, end_value = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.temp_db.name) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT start_date, end_date FROM daily_progress WHERE task_name = ?",
+                ("Implement Feature",),
+            )
+            start_value, end_value = cursor.fetchone()
 
         self.assertEqual(start_value, "2024-02-01")
         self.assertEqual(end_value, "2024-02-20")

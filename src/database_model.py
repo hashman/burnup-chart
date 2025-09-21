@@ -1,10 +1,28 @@
 """Enhanced database model with date filtering support for queries."""
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List, Optional, Tuple
 
-import pandas as pd
 import sqlite3
+
+import pandas as pd
+
+
+@dataclass
+class ProgressRecord:
+    """Represent a progress record to be stored in the database."""
+
+    record_date: date
+    project_name: str
+    task_name: str
+    assignee: str
+    start_date: date
+    end_date: date
+    actual_progress: float
+    status: str
+    show_label: str
+    is_backfilled: bool = False
 
 
 class DatabaseModel:
@@ -73,32 +91,11 @@ class DatabaseModel:
         conn.close()
         return bool(count > 0)
 
-    def insert_progress_record(
-        self,
-        record_date: date,
-        project_name: str,
-        task_name: str,
-        assignee: str,
-        start_date: date,
-        end_date: date,
-        actual_progress: float,
-        status: str,
-        show_label: str,
-        is_backfilled: bool = False,
-    ) -> None:
+    def insert_progress_record(self, record: ProgressRecord) -> None:
         """Insert or replace a progress record.
 
         Args:
-            record_date: Date of the record
-            project_name: Name of the project
-            task_name: Name of the task
-            assignee: Person assigned to the task
-            start_date: Task start date
-            end_date: Task end date
-            actual_progress: Actual progress percentage
-            status: Task status
-            show_label: Show label flag
-            is_backfilled: Whether this is backfilled data
+            record: Progress record to persist
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -112,16 +109,16 @@ class DatabaseModel:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """,
             (
-                record_date.isoformat(),
-                project_name,
-                task_name,
-                assignee,
-                start_date.isoformat(),
-                end_date.isoformat(),
-                actual_progress,
-                status,
-                show_label,
-                is_backfilled,
+                record.record_date.isoformat(),
+                record.project_name,
+                record.task_name,
+                record.assignee,
+                record.start_date.isoformat(),
+                record.end_date.isoformat(),
+                record.actual_progress,
+                record.status,
+                record.show_label,
+                record.is_backfilled,
             ),
         )
 

@@ -54,18 +54,18 @@ def main() -> int:
         if not run_command(command, description):
             failed_checks.append(description)
 
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     if failed_checks:
         print(f"❌ {len(failed_checks)} checks failed:")
         for check in failed_checks:
             print(f"  - {check}")
-        print(f"\n💡 To fix issues automatically, run:")
+        print("\n💡 To fix issues automatically, run:")
         print("  isort .")
         print("  black .")
         return 1
-    else:
-        print("✅ All code quality checks passed!")
-        return 0
+
+    print("✅ All code quality checks passed!")
+    return 0
 
 
 if __name__ == "__main__":

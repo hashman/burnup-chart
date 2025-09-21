@@ -35,6 +35,9 @@ disable = [
     "invalid-name",
     "line-too-long",  # handled by black
     "broad-except",
+    "too-many-instance-attributes",
+    "too-many-positional-arguments",
+    "consider-using-with",
 ]
 
 [tool.pylint.format]

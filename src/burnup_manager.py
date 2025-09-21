@@ -5,7 +5,7 @@ from typing import Optional
 
 import plotly.graph_objects as go
 
-from src.burnup_system import BurnUpSystem
+from src.burnup_system import BurnUpSystem, DateFilterOptions
 
 
 class BurnUpManager:
@@ -95,12 +95,13 @@ class BurnUpManager:
         Returns:
             Plotly Figure object or None if failed
         """
+        filter_options = DateFilterOptions(
+            target_year=target_year, start_date=start_date, end_date=end_date
+        )
         chart = self.system.create_burnup_chart(
             project_name,
             file_path,
-            target_year=target_year,
-            start_date=start_date,
-            end_date=end_date,
+            filter_options=filter_options,
         )
         if chart:
             chart.show()
