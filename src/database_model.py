@@ -128,6 +128,48 @@ class DatabaseModel:
         conn.commit()
         conn.close()
 
+    def update_task_dates(
+        self,
+        project_name: str,
+        task_name: str,
+        new_start_date: date,
+        new_end_date: date,
+    ) -> int:
+        """Overwrite start and end dates for a specific task.
+
+        Args:
+            project_name: Project name that owns the task
+            task_name: Name of the task to update
+            new_start_date: Updated start date
+            new_end_date: Updated end date
+
+        Returns:
+            Number of records affected by the update.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            UPDATE daily_progress
+            SET start_date = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE project_name = ? AND task_name = ?
+            """,
+            (
+                new_start_date.isoformat(),
+                new_end_date.isoformat(),
+                project_name,
+                task_name,
+            ),
+        )
+
+        affected_rows = cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        return affected_rows if affected_rows is not None else 0
+
     def get_existing_record(
         self, record_date: date, project_name: str, task_name: str
     ) -> Optional[float]:

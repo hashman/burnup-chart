@@ -132,6 +132,23 @@ class BurnUpManager:
         else:
             print("  Can safely execute daily_update()")
 
+    def overwrite_task_dates(
+        self,
+        project_name: str,
+        task_name: str,
+        new_start_date: date,
+        new_end_date: date,
+    ) -> bool:
+        """Overwrite start and end dates for a specific task."""
+
+        print(
+            f"✏️ Overwriting dates for task '{task_name}' in project '{project_name}' "
+            f"→ {new_start_date} to {new_end_date}"
+        )
+        return self.system.overwrite_task_dates(
+            project_name, task_name, new_start_date, new_end_date
+        )
+
     # Convenience methods for year-specific operations
     def initialize_project_for_year(self, file_path: str, year: int) -> bool:
         """Initialize project for a specific year.
