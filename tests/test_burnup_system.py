@@ -1,18 +1,19 @@
 """Unit tests for the burn-up chart system."""
 
+import os
+import sqlite3
 import tempfile
 import unittest
 from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
 import pandas as pd
-import sqlite3
 
 from src.burnup_manager import BurnUpManager
 from src.burnup_system import BurnUpSystem
 from src.chart_generator import ChartGenerator
 from src.data_loader import DataLoader
-from src.database_model import DatabaseModel
+from src.database_model import DatabaseModel, ProgressRecord
 from src.progress_calculator import ProgressCalculator
 
 
@@ -144,20 +145,17 @@ class TestDatabaseModel(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""
-        import os
-
         os.unlink(self.temp_db.name)
 
     def test_initialize_database(self) -> None:
         """Test database initialization."""
         # Check if table was created
-        conn = sqlite3.connect(self.temp_db.name)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='daily_progress'"
-        )
-        result = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.temp_db.name) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='daily_progress'"
+            )
+            result = cursor.fetchone()
 
         self.assertIsNotNone(result)
 
@@ -172,16 +170,18 @@ class TestDatabaseModel(unittest.TestCase):
 
         # Insert a record
         self.db_model.insert_progress_record(
-            record_date=test_date,
-            project_name="Test Project",
-            task_name="Test Task",
-            assignee="Test User",
-            start_date=date(2023, 1, 1),
-            end_date=date(2023, 1, 31),
-            actual_progress=0.5,
-            status="In Progress",
-            show_label="v",
-            is_backfilled=False,
+            ProgressRecord(
+                record_date=test_date,
+                project_name="Test Project",
+                task_name="Test Task",
+                assignee="Test User",
+                start_date=date(2023, 1, 1),
+                end_date=date(2023, 1, 31),
+                actual_progress=0.5,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            )
         )
 
         # Retrieve the record
@@ -197,16 +197,18 @@ class TestDatabaseModel(unittest.TestCase):
         original_end = date(2023, 1, 31)
 
         self.db_model.insert_progress_record(
-            record_date=date(2023, 1, 15),
-            project_name="Test Project",
-            task_name="Test Task",
-            assignee="Test User",
-            start_date=original_start,
-            end_date=original_end,
-            actual_progress=0.5,
-            status="In Progress",
-            show_label="v",
-            is_backfilled=False,
+            ProgressRecord(
+                record_date=date(2023, 1, 15),
+                project_name="Test Project",
+                task_name="Test Task",
+                assignee="Test User",
+                start_date=original_start,
+                end_date=original_end,
+                actual_progress=0.5,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            )
         )
 
         updated_count = self.db_model.update_task_dates(
@@ -218,17 +220,16 @@ class TestDatabaseModel(unittest.TestCase):
 
         self.assertEqual(updated_count, 1)
 
-        conn = sqlite3.connect(self.temp_db.name)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT start_date, end_date FROM daily_progress
-            WHERE project_name = ? AND task_name = ?
-            """,
-            ("Test Project", "Test Task"),
-        )
-        start_value, end_value = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.temp_db.name) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT start_date, end_date FROM daily_progress
+                WHERE project_name = ? AND task_name = ?
+                """,
+                ("Test Project", "Test Task"),
+            )
+            start_value, end_value = cursor.fetchone()
 
         self.assertEqual(start_value, "2023-02-01")
         self.assertEqual(end_value, "2023-02-28")
@@ -249,16 +250,18 @@ class TestDatabaseModel(unittest.TestCase):
         """Test has_historical_data with existing data."""
         # Insert a record first
         self.db_model.insert_progress_record(
-            record_date=date(2023, 1, 15),
-            project_name="Test Project",
-            task_name="Test Task",
-            assignee="Test User",
-            start_date=date(2023, 1, 1),
-            end_date=date(2023, 1, 31),
-            actual_progress=0.5,
-            status="In Progress",
-            show_label="v",
-            is_backfilled=False,
+            ProgressRecord(
+                record_date=date(2023, 1, 15),
+                project_name="Test Project",
+                task_name="Test Task",
+                assignee="Test User",
+                start_date=date(2023, 1, 1),
+                end_date=date(2023, 1, 31),
+                actual_progress=0.5,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            )
         )
 
         result = self.db_model.has_historical_data()
@@ -268,16 +271,18 @@ class TestDatabaseModel(unittest.TestCase):
         """Test getting task annotations."""
         # Insert a record with show_label='v'
         self.db_model.insert_progress_record(
-            record_date=date(2023, 1, 15),
-            project_name="Test Project",
-            task_name="Test Task",
-            assignee="Test User",
-            start_date=date(2023, 1, 1),
-            end_date=date(2023, 1, 31),
-            actual_progress=0.5,
-            status="In Progress",
-            show_label="v",
-            is_backfilled=False,
+            ProgressRecord(
+                record_date=date(2023, 1, 15),
+                project_name="Test Project",
+                task_name="Test Task",
+                assignee="Test User",
+                start_date=date(2023, 1, 1),
+                end_date=date(2023, 1, 31),
+                actual_progress=0.5,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            )
         )
 
         annotations = self.db_model.get_task_annotations("Test Project")
@@ -339,8 +344,6 @@ class TestBurnUpSystem(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""
-        import os
-
         os.unlink(self.temp_db.name)
 
     def test_has_historical_data(self) -> None:
@@ -376,16 +379,18 @@ class TestBurnUpSystem(unittest.TestCase):
         """Task date overwrite should update all matching records."""
 
         self.system.db_model.insert_progress_record(
-            record_date=date(2023, 1, 10),
-            project_name="Demo",
-            task_name="Implement Feature",
-            assignee="Alice",
-            start_date=date(2023, 1, 1),
-            end_date=date(2023, 1, 20),
-            actual_progress=0.3,
-            status="In Progress",
-            show_label="v",
-            is_backfilled=False,
+            ProgressRecord(
+                record_date=date(2023, 1, 10),
+                project_name="Demo",
+                task_name="Implement Feature",
+                assignee="Alice",
+                start_date=date(2023, 1, 1),
+                end_date=date(2023, 1, 20),
+                actual_progress=0.3,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            )
         )
 
         result = self.system.overwrite_task_dates(
@@ -397,17 +402,16 @@ class TestBurnUpSystem(unittest.TestCase):
 
         self.assertTrue(result)
 
-        conn = sqlite3.connect(self.temp_db.name)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT start_date, end_date FROM daily_progress
-            WHERE project_name = ? AND task_name = ?
-            """,
-            ("Demo", "Implement Feature"),
-        )
-        start_value, end_value = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.temp_db.name) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT start_date, end_date FROM daily_progress
+                WHERE project_name = ? AND task_name = ?
+                """,
+                ("Demo", "Implement Feature"),
+            )
+            start_value, end_value = cursor.fetchone()
 
         self.assertEqual(start_value, "2023-01-05")
         self.assertEqual(end_value, "2023-01-25")
@@ -448,8 +452,6 @@ class TestBurnUpManager(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""
-        import os
-
         os.unlink(self.temp_db.name)
 
     def test_check_status(self) -> None:

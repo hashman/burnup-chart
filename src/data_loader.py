@@ -1,8 +1,6 @@
 """Data loading utilities for burn-up chart system."""
 
 import os
-from datetime import datetime
-from typing import Optional
 
 import pandas as pd
 

@@ -32,7 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="burnup_history.db",
         help="Path to the SQLite database file (default: burnup_history.db).",
     )
-    parser.add_argument("--project", required=True, help="Project name that owns the task.")
+    parser.add_argument(
+        "--project", required=True, help="Project name that owns the task."
+    )
     parser.add_argument("--task", required=True, help="Task name to update.")
     parser.add_argument(
         "--start-date",
