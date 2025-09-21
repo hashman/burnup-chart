@@ -39,5 +39,8 @@ jobs:
     - name: Run Pylint
       run: pylint src tests main.py update_task_dates.py
 
+    - name: Run Mypy
+      run: mypy src
+
     - name: Run Pytest
       run: pytest
