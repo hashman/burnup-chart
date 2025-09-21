@@ -1,8 +1,10 @@
 """Final fixed burn-up system with proper plan progress filtering."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import plotly.graph_objects as go
 
@@ -11,6 +13,9 @@ from src.data_filter import DataFilter
 from src.data_loader import DataLoader
 from src.database_model import DatabaseModel, ProgressRecord
 from src.progress_calculator import ProgressCalculator
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -366,7 +371,9 @@ class BurnUpSystem:
                 f"{filter_options.start_date} to {filter_options.end_date}"
             )
 
-    def _apply_chart_filters(self, df, filter_options: DateFilterOptions):
+    def _apply_chart_filters(
+        self, df: "pd.DataFrame", filter_options: DateFilterOptions
+    ) -> "pd.DataFrame":
         """Apply the requested filters and return the filtered DataFrame."""
 
         original_count = len(df)
@@ -402,7 +409,7 @@ class BurnUpSystem:
 
     def _build_chart_components(
         self,
-        project_data,
+        project_data: "pd.DataFrame",
         project_name: str,
         filter_options: DateFilterOptions,
     ) -> ChartComponents:
