@@ -191,6 +191,60 @@ class TestDatabaseModel(unittest.TestCase):
 
         self.assertEqual(result, 0.5)
 
+    def test_update_task_dates(self) -> None:
+        """Test overwriting task start and end dates."""
+        original_start = date(2023, 1, 1)
+        original_end = date(2023, 1, 31)
+
+        self.db_model.insert_progress_record(
+            record_date=date(2023, 1, 15),
+            project_name="Test Project",
+            task_name="Test Task",
+            assignee="Test User",
+            start_date=original_start,
+            end_date=original_end,
+            actual_progress=0.5,
+            status="In Progress",
+            show_label="v",
+            is_backfilled=False,
+        )
+
+        updated_count = self.db_model.update_task_dates(
+            "Test Project",
+            "Test Task",
+            new_start_date=date(2023, 2, 1),
+            new_end_date=date(2023, 2, 28),
+        )
+
+        self.assertEqual(updated_count, 1)
+
+        conn = sqlite3.connect(self.temp_db.name)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT start_date, end_date FROM daily_progress
+            WHERE project_name = ? AND task_name = ?
+            """,
+            ("Test Project", "Test Task"),
+        )
+        start_value, end_value = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(start_value, "2023-02-01")
+        self.assertEqual(end_value, "2023-02-28")
+
+    def test_update_task_dates_no_match(self) -> None:
+        """Updating dates should return zero when task is missing."""
+
+        updated_count = self.db_model.update_task_dates(
+            "Unknown Project",
+            "Missing Task",
+            new_start_date=date(2023, 2, 1),
+            new_end_date=date(2023, 2, 28),
+        )
+
+        self.assertEqual(updated_count, 0)
+
     def test_has_historical_data_with_data(self) -> None:
         """Test has_historical_data with existing data."""
         # Insert a record first
@@ -316,6 +370,69 @@ class TestBurnUpSystem(unittest.TestCase):
         mock_validate.return_value = True
 
         result = self.system.daily_update_safe("test.xlsx")
+        self.assertFalse(result)
+
+    def test_overwrite_task_dates_success(self) -> None:
+        """Task date overwrite should update all matching records."""
+
+        self.system.db_model.insert_progress_record(
+            record_date=date(2023, 1, 10),
+            project_name="Demo",
+            task_name="Implement Feature",
+            assignee="Alice",
+            start_date=date(2023, 1, 1),
+            end_date=date(2023, 1, 20),
+            actual_progress=0.3,
+            status="In Progress",
+            show_label="v",
+            is_backfilled=False,
+        )
+
+        result = self.system.overwrite_task_dates(
+            "Demo",
+            "Implement Feature",
+            new_start_date=date(2023, 1, 5),
+            new_end_date=date(2023, 1, 25),
+        )
+
+        self.assertTrue(result)
+
+        conn = sqlite3.connect(self.temp_db.name)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT start_date, end_date FROM daily_progress
+            WHERE project_name = ? AND task_name = ?
+            """,
+            ("Demo", "Implement Feature"),
+        )
+        start_value, end_value = cursor.fetchone()
+        conn.close()
+
+        self.assertEqual(start_value, "2023-01-05")
+        self.assertEqual(end_value, "2023-01-25")
+
+    def test_overwrite_task_dates_invalid_range(self) -> None:
+        """Invalid date ranges should raise an error."""
+
+        with self.assertRaises(ValueError):
+            self.system.overwrite_task_dates(
+                "Demo",
+                "Implement Feature",
+                new_start_date=date(2023, 2, 1),
+                new_end_date=date(2023, 1, 1),
+            )
+
+    def test_overwrite_task_dates_missing_task(self) -> None:
+        """Overwriting a missing task should return False."""
+
+        result = self.system.overwrite_task_dates(
+            "Demo",
+            "Unknown Task",
+            new_start_date=date(2023, 2, 1),
+            new_end_date=date(2023, 2, 10),
+        )
+
         self.assertFalse(result)
 
 

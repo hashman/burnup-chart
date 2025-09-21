@@ -263,6 +263,44 @@ class BurnUpSystem:
             print(f"❌ Daily update failed: {e}")
             return False
 
+    def overwrite_task_dates(
+        self,
+        project_name: str,
+        task_name: str,
+        new_start_date: date,
+        new_end_date: date,
+    ) -> bool:
+        """Overwrite start and end dates for a specific task in the database.
+
+        Args:
+            project_name: Name of the project containing the task
+            task_name: Name of the task to update
+            new_start_date: Updated start date
+            new_end_date: Updated end date
+
+        Returns:
+            True if any records were updated, False otherwise
+        """
+        if new_start_date > new_end_date:
+            raise ValueError("Start date cannot be later than end date")
+
+        updated_count = self.db_model.update_task_dates(
+            project_name, task_name, new_start_date, new_end_date
+        )
+
+        if updated_count == 0:
+            print(
+                "⚠️ No matching records found in the historical database "
+                f"for task '{task_name}' under project '{project_name}'"
+            )
+            return False
+
+        print(
+            f"✅ Updated {updated_count} historical records for task '{task_name}' "
+            f"in project '{project_name}'"
+        )
+        return True
+
     def create_burnup_chart(
         self,
         project_name: str,

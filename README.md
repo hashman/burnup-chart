@@ -57,6 +57,23 @@ chart = manager.show_improved_chart("YFB", "plan.xlsx")
 manager.show_protection_status("YFB")
 ```
 
+### Overwrite Task Dates from the Command Line
+
+Use the dedicated helper script to adjust task schedules that are already stored
+in the historical database:
+
+```bash
+python update_task_dates.py \
+  --db burnup_history.db \
+  --project "Demo Project" \
+  --task "Implement Feature" \
+  --start-date 2024-02-01 \
+  --end-date 2024-02-20
+```
+
+The command exits with status code `0` on success, `1` when the provided dates
+are invalid, and `2` if no matching task records are found.
+
 ### Data Format
 
 Your Excel/CSV file should contain the following columns:
