@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pandas as pd
@@ -77,6 +78,33 @@ class TestDataLoader(unittest.TestCase):
         self.assertIsNone(loaded.loc[0, "Adjusted Start Date"])
         self.assertIsNone(loaded.loc[0, "Adjusted End Date"])
 
+    def test_load_project_data_fallback_between_excel_and_csv(self) -> None:
+        """Loader should fall back to alternate extension when available."""
+
+        df = pd.DataFrame(
+            {
+                "Project Name": ["Project"],
+                "Task Name": ["Task"],
+                "Start Date": ["2025-01-01"],
+                "End Date": ["2025-01-31"],
+                "Actual": [0.5],
+                "Assign": ["User"],
+                "Status": ["Planned"],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "plan.csv"
+            df.to_csv(csv_path, index=False)
+
+            # Request the same stem but with .xlsx extension to trigger fallback.
+            requested_path = csv_path.with_suffix(".xlsx")
+
+            loaded = self.data_loader.load_project_data(str(requested_path))
+
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded.loc[0, "Project Name"], "Project")
+
     @patch("os.path.exists")
     def test_load_project_data_file_not_found(self, mock_exists: Mock) -> None:
         """Test loading data when file doesn't exist."""
@@ -87,7 +115,7 @@ class TestDataLoader(unittest.TestCase):
 
     def test_load_project_data_unsupported_format(self) -> None:
         """Test loading data with unsupported file format."""
-        with patch("os.path.exists", return_value=True):
+        with patch("pathlib.Path.exists", return_value=True):
             with self.assertRaises(ValueError):
                 self.data_loader.load_project_data("test.txt")
 

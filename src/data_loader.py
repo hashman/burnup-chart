@@ -1,6 +1,7 @@
 """Data loading utilities for burn-up chart system."""
 
 import os
+from pathlib import Path
 
 import pandas as pd
 
@@ -22,15 +23,34 @@ class DataLoader:
             ValueError: If file format is not supported
             FileNotFoundError: If file doesn't exist
         """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
+        path = Path(file_path)
+        file_extension = path.suffix.lower()
 
-        file_extension = os.path.splitext(file_path)[1].lower()
+        if not path.exists():
+            fallback_extension = None
+            if file_extension == ".xlsx":
+                fallback_extension = ".csv"
+            elif file_extension == ".csv":
+                fallback_extension = ".xlsx"
+
+            if fallback_extension:
+                fallback_path = path.with_suffix(fallback_extension)
+                if fallback_path.exists():
+                    print(
+                        "ℹ️ Provided data file not found, using fallback: "
+                        f"{fallback_path.name}"
+                    )
+                    path = fallback_path
+                    file_extension = fallback_extension
+                else:
+                    raise FileNotFoundError(f"File not found: {file_path}")
+            else:
+                raise FileNotFoundError(f"File not found: {file_path}")
 
         if file_extension == ".xlsx":
-            df = pd.read_excel(file_path)
+            df = pd.read_excel(path)
         elif file_extension == ".csv":
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(path)
         else:
             raise ValueError(
                 f"Unsupported file format: {file_extension}. "
