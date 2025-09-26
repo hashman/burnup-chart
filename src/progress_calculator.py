@@ -11,6 +11,42 @@ class ProgressCalculator:
     """Handle all progress calculation operations with enhanced date range support."""
 
     @staticmethod
+    def _is_valid_date(value: object) -> bool:
+        """Return True when the provided value represents a valid date."""
+
+        return value is not None and not pd.isna(value)
+
+    @classmethod
+    def _resolve_task_dates(
+        cls, task: pd.Series, use_adjusted: bool
+    ) -> Tuple[Optional[date], Optional[date]]:
+        """Return the appropriate start/end dates for a task.
+
+        When ``use_adjusted`` is True and adjusted dates are present, those values
+        take precedence; otherwise the original plan dates are used.
+        """
+
+        start_date: Optional[date] = task.get("Start Date")
+        end_date: Optional[date] = task.get("End Date")
+
+        if use_adjusted:
+            adjusted_start = task.get("Adjusted Start Date")
+            adjusted_end = task.get("Adjusted End Date")
+            if cls._is_valid_date(adjusted_start):
+                start_date = adjusted_start
+            if cls._is_valid_date(adjusted_end):
+                end_date = adjusted_end
+
+        if not cls._is_valid_date(start_date) or not cls._is_valid_date(end_date):
+            return None, None
+
+        if start_date > end_date:
+            # Swap to avoid invalid ranges while still reflecting user data.
+            return end_date, start_date
+
+        return start_date, end_date
+
+    @staticmethod
     def calculate_plan_percentage(
         start_date: date, end_date: date, current_date: date
     ) -> float:
@@ -39,28 +75,42 @@ class ProgressCalculator:
         return min(elapsed_days / total_days, 1.0)
 
     @classmethod
-    def calculate_plan_progress_original(
-        cls, project_data: pd.DataFrame, target_date: date
+    def calculate_plan_progress(
+        cls, project_data: pd.DataFrame, target_date: date, *, use_adjusted: bool = False
     ) -> float:
-        """Calculate original plan progress (all tasks included).
+        """Calculate plan progress for the requested plan version.
 
         Args:
             project_data: DataFrame containing project tasks
             target_date: Date to calculate progress for
+            use_adjusted: Whether to prioritise adjusted plan dates
 
         Returns:
             Overall plan progress percentage
         """
+
         total_plan = 0.0
-        task_count = len(project_data)
+        counted_tasks = 0
 
         for _, task in project_data.iterrows():
-            task_plan = cls.calculate_plan_percentage(
-                task["Start Date"], task["End Date"], target_date
-            )
+            start_date, end_date = cls._resolve_task_dates(task, use_adjusted)
+            if start_date is None or end_date is None:
+                continue
+            task_plan = cls.calculate_plan_percentage(start_date, end_date, target_date)
             total_plan += task_plan
+            counted_tasks += 1
 
-        return total_plan / task_count * 100 if task_count > 0 else 0.0
+        return total_plan / counted_tasks * 100 if counted_tasks > 0 else 0.0
+
+    @classmethod
+    def calculate_plan_progress_original(
+        cls, project_data: pd.DataFrame, target_date: date
+    ) -> float:
+        """Backward-compatible helper for legacy callers."""
+
+        return cls.calculate_plan_progress(
+            project_data, target_date, use_adjusted=False
+        )
 
     @classmethod
     def calculate_optimal_chart_date_range(
@@ -100,8 +150,8 @@ class ProgressCalculator:
     @classmethod
     def generate_plan_progress_sequence(
         cls, project_data: pd.DataFrame, chart_start_date: date, chart_end_date: date
-    ) -> Tuple[List[date], List[float]]:
-        """Generate plan progress sequence for the specified date range.
+    ) -> Tuple[List[date], List[float], List[float]]:
+        """Generate plan progress sequences for initial and current plan lines.
 
         Args:
             project_data: Filtered DataFrame containing project tasks
@@ -109,7 +159,7 @@ class ProgressCalculator:
             chart_end_date: End date for chart
 
         Returns:
-            Tuple of (dates, plan_progress_values)
+            Tuple of (dates, initial_plan_progress, current_plan_progress)
         """
         # Create date range
         dates = []
@@ -119,12 +169,16 @@ class ProgressCalculator:
             current_date += dt.timedelta(days=1)
 
         # Calculate plan progress for each date
-        plan_progress = [
-            cls.calculate_plan_progress_original(project_data, date_val)
+        initial_plan_progress = [
+            cls.calculate_plan_progress(project_data, date_val, use_adjusted=False)
+            for date_val in dates
+        ]
+        current_plan_progress = [
+            cls.calculate_plan_progress(project_data, date_val, use_adjusted=True)
             for date_val in dates
         ]
 
-        return dates, plan_progress
+        return dates, initial_plan_progress, current_plan_progress
 
     @classmethod
     def get_filtered_date_context(

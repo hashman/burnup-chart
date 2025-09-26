@@ -7,6 +7,7 @@ An improved burn-up chart system with history protection and smart annotation po
 - 🔒 **History Protection**: Safe daily updates that don't modify historical data
 - 🎯 **Smart Annotation Positioning**: Intelligent collision avoidance for task annotations
 - 📊 **Professional Charts**: Clean, readable burn-up charts with Plotly
+- 📉 **Plan Comparison**: Visualize initial vs. current plan lines alongside actual progress
 - 🗄️ **SQLite Database**: Persistent data storage with proper schema
 - 📈 **Progress Tracking**: Smooth actual progress generation and planning
 - 🔧 **Type Safety**: Full type hints throughout the codebase

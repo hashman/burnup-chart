@@ -38,8 +38,17 @@ class DataLoader:
             )
 
         # Convert date columns to date objects
-        df["Start Date"] = pd.to_datetime(df["Start Date"]).dt.date
-        df["End Date"] = pd.to_datetime(df["End Date"]).dt.date
+        df["Start Date"] = pd.to_datetime(df["Start Date"], errors="coerce").dt.date
+        df["End Date"] = pd.to_datetime(df["End Date"], errors="coerce").dt.date
+
+        # Optional adjusted plan dates
+        optional_date_columns = ["Adjusted Start Date", "Adjusted End Date"]
+        for column in optional_date_columns:
+            if column in df.columns:
+                df[column] = pd.to_datetime(df[column], errors="coerce").dt.date
+            else:
+                # Ensure downstream logic can safely reference these columns
+                df[column] = pd.Series([None] * len(df), dtype="object")
 
         return df
 
