@@ -193,6 +193,46 @@ class TestProgressCalculator(unittest.TestCase):
         # Current plan should differ when adjusted dates exist
         self.assertNotEqual(initial_plan, current_plan)
 
+    def test_resolve_task_dates_prefers_adjusted(self) -> None:
+        """Adjusted dates should override original planning windows."""
+
+        row = pd.Series(
+            {
+                "Start Date": date(2025, 1, 1),
+                "End Date": date(2025, 2, 1),
+                "Adjusted Start Date": date(2025, 1, 10),
+                "Adjusted End Date": date(2025, 2, 10),
+            }
+        )
+        start_date, end_date = self.progress_calc._resolve_task_dates(  # pylint: disable=protected-access
+            row, use_adjusted=True
+        )
+        self.assertEqual(start_date, date(2025, 1, 10))
+        self.assertEqual(end_date, date(2025, 2, 10))
+
+    def test_get_filtered_date_context_variants(self) -> None:
+        """Cover context calculation for different filter types."""
+
+        project_data = pd.DataFrame(
+            {
+                "Start Date": [date(2025, 1, 1)],
+                "End Date": [date(2025, 2, 1)],
+            }
+        )
+
+        year_context = self.progress_calc.get_filtered_date_context(
+            project_data, target_year=2025
+        )
+        self.assertEqual(year_context["filter_type"], "year")
+
+        range_context = self.progress_calc.get_filtered_date_context(
+            project_data, start_date=date(2025, 1, 15), end_date=date(2025, 1, 31)
+        )
+        self.assertEqual(range_context["filter_type"], "date_range")
+
+        no_filter_context = self.progress_calc.get_filtered_date_context(project_data)
+        self.assertEqual(no_filter_context["filter_type"], "none")
+
     def test_generate_smooth_actual_progress(self) -> None:
         """Test smooth actual progress generation."""
         project_data = pd.DataFrame(
@@ -370,6 +410,50 @@ class TestDatabaseModel(unittest.TestCase):
         self.assertEqual(annotations[0]["task_name"], "Test Task")
         self.assertEqual(annotations[0]["end_date"], date(2023, 1, 31))
 
+    def test_database_filters(self) -> None:
+        """Database queries should honour filtering options."""
+
+        records = [
+            ProgressRecord(
+                record_date=date(2025, 7, 10),
+                project_name="Demo",
+                task_name="Task A",
+                assignee="Alice",
+                start_date=date(2025, 7, 1),
+                end_date=date(2025, 7, 20),
+                actual_progress=0.5,
+                status="In Progress",
+                show_label="v",
+                is_backfilled=False,
+            ),
+            ProgressRecord(
+                record_date=date(2025, 8, 5),
+                project_name="Demo",
+                task_name="Task B",
+                assignee="Bob",
+                start_date=date(2025, 8, 1),
+                end_date=date(2025, 9, 1),
+                actual_progress=0.7,
+                status="Planned",
+                show_label="v",
+                is_backfilled=False,
+            ),
+        ]
+
+        for record in records:
+            self.db_model.insert_progress_record(record)
+
+        dates, progress = self.db_model.get_historical_actual_data(
+            "Demo", start_date=date(2025, 7, 1), end_date=date(2025, 8, 10)
+        )
+        self.assertEqual(len(dates), 2)
+        self.assertEqual(len(progress), 2)
+
+        tasks = self.db_model.get_filtered_tasks_from_db(
+            "Demo", start_date=date(2025, 7, 1), end_date=date(2025, 7, 31)
+        )
+        self.assertEqual(tasks, ["Task A"])
+
 
 class TestChartGenerator(unittest.TestCase):
     """Test cases for ChartGenerator class."""
@@ -388,6 +472,26 @@ class TestChartGenerator(unittest.TestCase):
         long_text = "This is a very long text that should be wrapped"
         result = self.chart_gen.wrap_text(long_text, 20)
         self.assertIn("<br>", result)
+
+    def test_wrap_text_forces_split_on_long_word(self) -> None:
+        """Extremely long tokens should be forcefully split."""
+        long_word = "A" * 50
+        result = self.chart_gen.wrap_text(long_word, 10)
+        self.assertIn("<br>", result)
+
+    def test_calculate_smart_annotation_positions_large_group(self) -> None:
+        """Large groups should exercise the general offset/height logic."""
+        annotations = [
+            {
+                "task_name": f"Task {idx}",
+                "end_date": date(2025, 7, 1 + idx),
+                "label": f"Label {idx}",
+            }
+            for idx in range(6)
+        ]
+
+        result = self.chart_gen.calculate_smart_annotation_positions(annotations)
+        self.assertEqual(len(result), 6)
 
     def test_calculate_smart_annotation_positions_empty(self) -> None:
         """Test smart annotation positioning with empty list."""
