@@ -1,13 +1,59 @@
 """Main entry point for the burn-up chart system."""
 
+from __future__ import annotations
+
+import argparse
 import traceback
 from datetime import date
+from pathlib import Path
+from typing import Optional
 
 from src.burnup_manager import BurnUpManager
 
 
+def _resolve_plan_path(explicit_path: Optional[str]) -> str:
+    """Return the plan file path to use, applying sensible fallbacks."""
+
+    if explicit_path:
+        candidate = Path(explicit_path)
+        if candidate.exists():
+            return str(candidate)
+        raise FileNotFoundError(f"Specified plan file not found: {explicit_path}")
+
+    for default_name in ("plan.xlsx", "plan.csv"):
+        candidate = Path(default_name)
+        if candidate.exists():
+            return str(candidate)
+
+    raise FileNotFoundError(
+        "No plan file supplied and neither 'plan.xlsx' nor 'plan.csv' were found."
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+
+    parser = argparse.ArgumentParser(
+        description="Run the burn-up chart system demo workflow"
+    )
+    parser.add_argument(
+        "--plan",
+        dest="plan_path",
+        help="Path to the project plan file (CSV or XLSX).",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
     """Main function to demonstrate the burn-up system usage."""
+    args = parse_args()
+
+    try:
+        plan_path = _resolve_plan_path(args.plan_path)
+    except FileNotFoundError as exc:
+        print(f"❌ {exc}")
+        return
+
     manager = BurnUpManager()
 
     print("=== IMPROVED Enhanced Safe Historical Burn-up Chart System ===")
@@ -31,12 +77,12 @@ def main() -> None:
         # Step 2: Initialize if no data exists
         if not manager.system.has_historical_data():
             print("Step 2: Initialize project (first time use)")
-            manager.initialize_project("plan.xlsx")
+            manager.initialize_project(plan_path)
             print()
 
         # Step 3: Safe daily update
         print("Step 3: Execute daily update (safe mode)")
-        manager.daily_update("plan.xlsx")
+        manager.daily_update(plan_path)
         print()
 
         # Step 4: Show improved chart
@@ -45,7 +91,7 @@ def main() -> None:
         start_date = date(2025, 7, 1)
         end_date = date(2025, 12, 31)
         chart = manager.show_improved_chart(
-            "YFB", "plan.xlsx", start_date=start_date, end_date=end_date
+            "YFB", plan_path, start_date=start_date, end_date=end_date
         )
         # chart = manager.show_improved_chart("YFB", "plan.xlsx", target_year=2025)
         if chart:
