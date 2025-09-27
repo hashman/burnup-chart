@@ -37,7 +37,9 @@ disable = [
     "broad-except",
     "too-many-instance-attributes",
     "too-many-positional-arguments",
+    "too-many-statements",
     "consider-using-with",
+    "protected-access",
 ]
 
 [tool.pylint.format]
