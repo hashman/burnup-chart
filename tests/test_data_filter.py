@@ -1,7 +1,5 @@
 """Unit tests focused on DataFilter helper functions."""
 
-from __future__ import annotations
-
 from datetime import date
 from unittest import TestCase
 

@@ -1,7 +1,5 @@
 """Main entry point for the burn-up chart system."""
 
-from __future__ import annotations
-
 import argparse
 import traceback
 from datetime import date
