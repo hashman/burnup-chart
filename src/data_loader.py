@@ -1,6 +1,5 @@
 """Data loading utilities for burn-up chart system."""
 
-import os
 from pathlib import Path
 
 import pandas as pd

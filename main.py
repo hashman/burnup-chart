@@ -68,7 +68,6 @@ def main() -> None:
     if not unique_projects:
         print("❌ Plan file contains no projects")
         return
-    first_project = unique_projects[0]
     print("📁 Projects detected:")
     for project in unique_projects:
         print(f"  - {project}")
