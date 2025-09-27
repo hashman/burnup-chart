@@ -2,7 +2,7 @@
 
 import datetime as dt
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
 
@@ -40,11 +40,14 @@ class ProgressCalculator:
         if not cls._is_valid_date(start_date) or not cls._is_valid_date(end_date):
             return None, None
 
-        if start_date > end_date:
-            # Swap to avoid invalid ranges while still reflecting user data.
-            return end_date, start_date
+        start_date_typed = cast(date, start_date)
+        end_date_typed = cast(date, end_date)
 
-        return start_date, end_date
+        if start_date_typed > end_date_typed:
+            # Swap to avoid invalid ranges while still reflecting user data.
+            return end_date_typed, start_date_typed
+
+        return start_date_typed, end_date_typed
 
     @staticmethod
     def calculate_plan_percentage(
