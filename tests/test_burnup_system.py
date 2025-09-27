@@ -184,8 +184,10 @@ class TestProgressCalculator(unittest.TestCase):
             }
         )
 
-        dates, initial_plan, current_plan = self.progress_calc.generate_plan_progress_sequence(
-            project_data, date(2025, 1, 1), date(2025, 1, 5)
+        dates, initial_plan, current_plan = (
+            self.progress_calc.generate_plan_progress_sequence(
+                project_data, date(2025, 1, 1), date(2025, 1, 5)
+            )
         )
 
         self.assertEqual(len(dates), len(initial_plan))
@@ -204,8 +206,10 @@ class TestProgressCalculator(unittest.TestCase):
                 "Adjusted End Date": date(2025, 2, 10),
             }
         )
-        start_date, end_date = self.progress_calc._resolve_task_dates(  # pylint: disable=protected-access
-            row, use_adjusted=True
+        start_date, end_date = (
+            self.progress_calc._resolve_task_dates(  # pylint: disable=protected-access
+                row, use_adjusted=True
+            )
         )
         self.assertEqual(start_date, date(2025, 1, 10))
         self.assertEqual(end_date, date(2025, 2, 10))

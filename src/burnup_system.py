@@ -58,12 +58,8 @@ class ChartComponents:
 
         print("✅ Chart generated with COMPLETELY filtered data:")
         print(f"  - Plan date range: {self.chart_start} to {self.chart_end}")
-        print(
-            f"  - Initial plan points: {len(self.initial_plan_progress)} (filtered)"
-        )
-        print(
-            f"  - Current plan points: {len(self.current_plan_progress)} (filtered)"
-        )
+        print(f"  - Initial plan points: {len(self.initial_plan_progress)} (filtered)")
+        print(f"  - Current plan points: {len(self.current_plan_progress)} (filtered)")
         print(f"  - Actual data points: {len(self.actual_dates)} (filtered)")
         print(f"  - Annotations: {len(self.task_annotations)} (filtered)")
         print(f"  - Filter context: {self.filter_context['filter_description']}")
@@ -436,8 +432,7 @@ class BurnUpSystem:
             project_data, chart_start, chart_end
         )
         print(
-            "📊 Generated plan progress: "
-            f"{len(dates)} data points (initial/current)"
+            "📊 Generated plan progress: " f"{len(dates)} data points (initial/current)"
         )
 
         print("📊 Getting filtered historical data from database...")

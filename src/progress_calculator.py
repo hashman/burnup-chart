@@ -76,7 +76,11 @@ class ProgressCalculator:
 
     @classmethod
     def calculate_plan_progress(
-        cls, project_data: pd.DataFrame, target_date: date, *, use_adjusted: bool = False
+        cls,
+        project_data: pd.DataFrame,
+        target_date: date,
+        *,
+        use_adjusted: bool = False,
     ) -> float:
         """Calculate plan progress for the requested plan version.
 
