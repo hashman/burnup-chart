@@ -37,7 +37,8 @@ class ChartComponents:
     """Bundle chart data preparation results."""
 
     dates: List[date]
-    plan_progress: List[float]
+    initial_plan_progress: List[float]
+    current_plan_progress: List[float]
     actual_dates: List[date]
     actual_progress: List[float]
     task_annotations: List[dict]
@@ -57,7 +58,8 @@ class ChartComponents:
 
         print("✅ Chart generated with COMPLETELY filtered data:")
         print(f"  - Plan date range: {self.chart_start} to {self.chart_end}")
-        print(f"  - Plan data points: {len(self.dates)} (filtered)")
+        print(f"  - Initial plan points: {len(self.initial_plan_progress)} (filtered)")
+        print(f"  - Current plan points: {len(self.current_plan_progress)} (filtered)")
         print(f"  - Actual data points: {len(self.actual_dates)} (filtered)")
         print(f"  - Annotations: {len(self.task_annotations)} (filtered)")
         print(f"  - Filter context: {self.filter_context['filter_description']}")
@@ -422,10 +424,16 @@ class BurnUpSystem:
         print(f"📊 Chart date range: {chart_start} to {chart_end}")
 
         print("📊 Generating plan progress for filtered date range...")
-        dates, plan_progress = self.progress_calc.generate_plan_progress_sequence(
+        (
+            dates,
+            initial_plan_progress,
+            current_plan_progress,
+        ) = self.progress_calc.generate_plan_progress_sequence(
             project_data, chart_start, chart_end
         )
-        print(f"📊 Generated plan progress: {len(dates)} data points")
+        print(
+            "📊 Generated plan progress: " f"{len(dates)} data points (initial/current)"
+        )
 
         print("📊 Getting filtered historical data from database...")
         actual_dates, actual_progress = self.db_model.get_historical_actual_data(
@@ -454,7 +462,8 @@ class BurnUpSystem:
 
         return ChartComponents(
             dates=dates,
-            plan_progress=plan_progress,
+            initial_plan_progress=initial_plan_progress,
+            current_plan_progress=current_plan_progress,
             actual_dates=actual_dates,
             actual_progress=actual_progress,
             task_annotations=task_annotations,
@@ -490,7 +499,8 @@ class BurnUpSystem:
             chart = self.chart_gen.create_burnup_chart(
                 project_name=f"{project_name}{components.title_suffix()}",
                 dates=components.dates,
-                plan_progress=components.plan_progress,
+                initial_plan_progress=components.initial_plan_progress,
+                current_plan_progress=components.current_plan_progress,
                 actual_dates=components.actual_dates,
                 actual_progress=components.actual_progress,
                 task_annotations=components.task_annotations,
