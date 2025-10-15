@@ -266,7 +266,8 @@ class ChartGenerator:
         cls,
         project_name: str,
         dates: List,
-        plan_progress: List[float],
+        initial_plan_progress: List[float],
+        current_plan_progress: List[float],
         actual_dates: List,
         actual_progress: List[float],
         task_annotations: List[Dict],
@@ -277,7 +278,8 @@ class ChartGenerator:
         Args:
             project_name: Name of the project
             dates: List of dates for plan progress
-            plan_progress: List of plan progress values
+            initial_plan_progress: List of original plan progress values
+            current_plan_progress: List of adjusted plan progress values
             actual_dates: List of dates for actual progress
             actual_progress: List of actual progress values
             task_annotations: List of task annotation dictionaries
@@ -298,14 +300,26 @@ class ChartGenerator:
         # Create chart
         fig = go.Figure()
 
-        # Add plan line
+        x_axis_dates = [datetime.combine(x, datetime.min.time()) for x in dates]
+
+        # Add plan lines
         fig.add_trace(
             go.Scatter(
-                x=[datetime.combine(x, datetime.min.time()) for x in dates],
-                y=plan_progress,
+                x=x_axis_dates,
+                y=initial_plan_progress,
                 mode="lines",
-                name="Planned Progress",
-                line={"color": "lightblue", "width": 2},
+                name="Initial Plan",
+                line={"color": "#9dc4f6", "width": 2, "dash": "dot"},
+            )
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_axis_dates,
+                y=current_plan_progress,
+                mode="lines",
+                name="Current Plan",
+                line={"color": "#2b6cb0", "width": 2.5},
             )
         )
 

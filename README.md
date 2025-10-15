@@ -7,6 +7,7 @@ An improved burn-up chart system with history protection and smart annotation po
 - 🔒 **History Protection**: Safe daily updates that don't modify historical data
 - 🎯 **Smart Annotation Positioning**: Intelligent collision avoidance for task annotations
 - 📊 **Professional Charts**: Clean, readable burn-up charts with Plotly
+- 📉 **Plan Comparison**: Visualize initial vs. current plan lines alongside actual progress
 - 🗄️ **SQLite Database**: Persistent data storage with proper schema
 - 📈 **Progress Tracking**: Smooth actual progress generation and planning
 - 🔧 **Type Safety**: Full type hints throughout the codebase
@@ -76,7 +77,9 @@ are invalid, and `2` if no matching task records are found.
 
 ### Data Format
 
-Your Excel/CSV file should contain the following columns:
+Your Excel/CSV file should contain the following columns (the loader will
+automatically fall back between `.xlsx` and `.csv` versions of the same file
+name when only one exists):
 
 - `Project Name`: Name of the project
 - `Task Name`: Name of the task
