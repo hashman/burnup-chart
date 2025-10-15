@@ -110,16 +110,6 @@ class ProgressCalculator:
         return total_plan / counted_tasks * 100 if counted_tasks > 0 else 0.0
 
     @classmethod
-    def calculate_plan_progress_original(
-        cls, project_data: pd.DataFrame, target_date: date
-    ) -> float:
-        """Backward-compatible helper for legacy callers."""
-
-        return cls.calculate_plan_progress(
-            project_data, target_date, use_adjusted=False
-        )
-
-    @classmethod
     def calculate_optimal_chart_date_range(
         cls, project_data: pd.DataFrame, buffer_days: int = 5, min_range_days: int = 30
     ) -> Tuple[date, date]:
